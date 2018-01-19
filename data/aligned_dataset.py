@@ -87,10 +87,10 @@ class AlignedDataset(BaseDataset):
         image_tensor,A_tensor,B_tensor =split(lab_image,1,2)
 
 
-        image_tensor =image_tensor.sub_(50).div_(50)
+        image_tensor =image_tensor.div_(100)
         image_tensor = image_tensor.permute(2, 0, 1)
-        A_tensor = A_tensor.div(127).numpy()
-        B_tensor = B_tensor.div(127).numpy()
+        A_tensor = A_tensor.add(127).div(255).numpy()
+        B_tensor = B_tensor.add(127).div(255).numpy()
 
 
         A_tensor =rescale(A_tensor,(0.5,0.5))

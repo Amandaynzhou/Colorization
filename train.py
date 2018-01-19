@@ -120,7 +120,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     ### print out errors
         if total_steps % opt.print_freq == 0:
             errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
-            t = 0
+            t = 0.01
 
             visualizer.print_current_errors(epoch,t, val_epoch_iter, errors,mode='val')
             visualizer.plot_current_errors(errors, total_steps,mode='val')
