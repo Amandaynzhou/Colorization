@@ -61,7 +61,8 @@ class RecolorModel(BaseModel):
 
 
     def encode_input(self, label_map,real_image, infer=False):
-
+        # import pdb
+        # pdb.set_trace()
         input_label = label_map.data.cuda()
         #input_label.resize_()
         real_image = Variable(real_image.data.cuda())
@@ -71,9 +72,9 @@ class RecolorModel(BaseModel):
 
 
 
-    def forward(self, label, image,  infer=False):
+    def forward(self, label, image, returnimg, infer=False):
         # Encode Inputs
-        input_label, real_image = self.encode_input(label,image)
+        input_label, real_image = self.encode_input(label,image,infer=infer)
         # import pdb;pdb.set_trace()
         recolor_image = self.netLocal.forward(real_image)
 
@@ -82,13 +83,14 @@ class RecolorModel(BaseModel):
         loss_Local = self.criterionMSE(recolor_image,input_label)
 
         # Only return the recolor image if necessary to save
-        return [ [ loss_Local ], None if not infer else recolor_image ]
+        return [ [ loss_Local ], None if not returnimg else recolor_image ]
 
     def inference(self, label, image):
         # Encode Inputs        
         input_label, real_image = self.encode_input(label, image, infer=True)
         recolor_image = self.netLocal.forward(real_image)
-        return recolor_image
+        loss_Local = self.criterionMSE(recolor_image, input_label)
+        return [ [ loss_Local ], None ]
 
 
     def save(self, which_epoch):

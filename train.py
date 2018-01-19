@@ -46,7 +46,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     # import pdb;pdb.set_trace()
     if epoch != start_epoch:
         train_epoch_iter = train_epoch_iter % train_dataset_size
-
+    iter_start_time = time.time()
     for i, train_data in enumerate(train_dataset, start=train_epoch_iter):
 
 
@@ -57,7 +57,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         # whether to collect output images
         save_train = total_steps % opt.display_freq == 0
         ############## Forward Pass ######################
-        losses, generated = model(Variable(train_data['label']),Variable(train_data['image']), infer=save_train)
+        losses, generated = model(Variable(train_data['label']),Variable(train_data['image']), returnimg=save_train)
 
         # sum per device losses
         losses = [ torch.mean(x) if not isinstance(x, int) else x for x in losses ]
@@ -72,10 +72,12 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         loss_Local.backward()
         model.module.optimizer_L.step()
 
-        #call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"]) 
+        #call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"])
 
         ############## Display results and errors ##########
         ### print out errors
+        if train_epoch_iter == 28400:
+            import pdb;pdb.set_trace()
         if total_steps % opt.print_freq == 0:
             errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
             t = (time.time() - iter_start_time) / opt.batchSize
@@ -96,33 +98,40 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         ### save latest model
         if total_steps % opt.save_latest_freq == 0:
             print('saving the latest model (epoch %d, total_steps %d)' % (epoch, total_steps))
-            model.module.save('latest')            
+            model.module.save('latest')
             np.savetxt(iter_path, (epoch, train_epoch_iter), delimiter=',', fmt='%d')
 
 
     Val_loss_count = 0
     best_loss =999999
+
     for p,val_data in enumerate(val_dataset,start=val_epoch_iter):
-        import pdb
+        if val_epoch_iter==3000:
 
-        pdb.set_trace()
-        val_epoch_iter += int(math.floor(opt.batchSize*0.1))
-        losses, generated = model(Variable(val_data['label']), Variable(val_data['image']))
+        # model.eval()
+            import pdb;
 
+            pdb.set_trace()
+        val_epoch_iter += opt.batchSize
+        # losses, generated = model(Variable(val_data['label'],volatile=True),
+        #                           Variable(val_data['image'],volatile=True) ,infer=False)
+        losses ,_ = model(Variable(val_data['label'],volatile=True),
+                        Variable(val_data['image'],volatile=True),returnimg=False,infer = True)
         # sum per device losses
         losses = [torch.mean(x) if not isinstance(x, int) else x for x in losses]
         loss_dict = dict(zip(model.module.loss_names, losses))
 
         # calculate final loss scalar
         loss_MSE = (loss_dict['MSE'])
-        loss_Local = loss_MSE
+        loss_Local = loss_MSE.data[0]
         Val_loss_count+=loss_Local
+        model.module.optimizer_L.zero_grad()
     ### print out errors
         if total_steps % opt.print_freq == 0:
             errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
-            t = 0.01
+            t = (time.time() - iter_start_time) / opt.batchSize
 
-            visualizer.print_current_errors(epoch,t, val_epoch_iter, errors,mode='val')
+            visualizer.print_current_errors(epoch, val_epoch_iter, errors,t,mode='val')
             visualizer.plot_current_errors(errors, total_steps,mode='val')
 
     if Val_loss_count< best_loss:
