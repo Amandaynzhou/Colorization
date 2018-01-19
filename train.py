@@ -76,8 +76,8 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
 
         ############## Display results and errors ##########
         ### print out errors
-        if train_epoch_iter == 28400:
-            import pdb;pdb.set_trace()
+        # if train_epoch_iter == 28400:
+        #     import pdb;pdb.set_trace()
         if total_steps % opt.print_freq == 0:
             errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
             t = (time.time() - iter_start_time) / opt.batchSize
@@ -106,12 +106,12 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     best_loss =999999
 
     for p,val_data in enumerate(val_dataset,start=val_epoch_iter):
-        if val_epoch_iter==3000:
+        # if val_epoch_iter==3000:
 
         # model.eval()
-            import pdb;
-
-            pdb.set_trace()
+        #     import pdb;
+        #
+        #     pdb.set_trace()
         val_epoch_iter += opt.batchSize
         # losses, generated = model(Variable(val_data['label'],volatile=True),
         #                           Variable(val_data['image'],volatile=True) ,infer=False)
