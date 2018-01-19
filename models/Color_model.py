@@ -21,8 +21,8 @@ class RecolorModel(BaseModel):
 
         ##### define networks        
 
-        if self.isTrain:
-            self.netLocal = networks.define_Local(input_nc, opt.output_nc,opt.ndf, opt.n_downsample, opt.norm,
+        # if self.isTrain:
+        self.netLocal = networks.define_Local(input_nc, opt.output_nc,opt.ndf, opt.n_downsample, opt.norm,
                                             gpu_ids=self.gpu_ids)
 
         print('---------- Networks initialized -------------')
@@ -63,7 +63,9 @@ class RecolorModel(BaseModel):
     def encode_input(self, label_map,real_image, infer=False):
 
         input_label = label_map.data.cuda()
+        #input_label.resize_()
         real_image = Variable(real_image.data.cuda())
+        input_label = Variable(input_label, volatile=infer)
 
         return input_label,real_image
 
@@ -72,12 +74,12 @@ class RecolorModel(BaseModel):
     def forward(self, label, image,  infer=False):
         # Encode Inputs
         input_label, real_image = self.encode_input(label,image)
-
-        recolor_image = self.netLocal.forward(input_label)
+        # import pdb;pdb.set_trace()
+        recolor_image = self.netLocal.forward(real_image)
 
         #loss
 
-        loss_Local = self.criterionMSE(recolor_image,real_image, True)
+        loss_Local = self.criterionMSE(recolor_image,input_label)
 
         # Only return the recolor image if necessary to save
         return [ [ loss_Local ], None if not infer else recolor_image ]
@@ -85,7 +87,7 @@ class RecolorModel(BaseModel):
     def inference(self, label, image):
         # Encode Inputs        
         input_label, real_image = self.encode_input(label, image, infer=True)
-        recolor_image = self.netLocal.forward(input_label)
+        recolor_image = self.netLocal.forward(real_image)
         return recolor_image
 
 

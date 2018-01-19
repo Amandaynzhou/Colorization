@@ -11,17 +11,17 @@ import os
 import numpy as np
 import torch
 from torch.autograd import Variable
-
+import math
 opt = TrainOptions().parse()
 iter_path = os.path.join(opt.checkpoints_dir, opt.name, 'iter.txt')
 if opt.continue_train:
     try:
-        start_epoch, epoch_iter = np.loadtxt(iter_path , delimiter=',', dtype=int)
+        start_epoch, train_epoch_iter,val_epoch_iter= np.loadtxt(iter_path , delimiter=',', dtype=int)
     except:
-        start_epoch, epoch_iter = 1, 0
-    print('Resuming from epoch %d at iteration %d' % (start_epoch, epoch_iter))        
+        start_epoch,  train_epoch_iter,val_epoch_iter = 1, 0,0
+    print('Resuming from epoch %d at iteration %d' % (start_epoch,train_epoch_iter))
 else:    
-    start_epoch, epoch_iter = 1, 0
+    start_epoch, train_epoch_iter,val_epoch_iter = 1, 0,0
 
 if opt.debug:
     opt.display_freq = 1
@@ -30,30 +30,34 @@ if opt.debug:
     opt.niter_decay = 0
     opt.max_dataset_size = 10
 
-data_loader = CreateDataLoader(opt)
-dataset = data_loader.load_data()
-dataset_size = len(data_loader)
-print('#training images = %d' % dataset_size)
+train_data_loader = CreateDataLoader(opt)
 
+train_dataset,val_dataset = train_data_loader.load_data()
+train_dataset_size = len(train_data_loader)
+val_dataset_size = 36900 - train_dataset_size
+print('#training images = %d' % train_dataset_size)
+print ('#valing images: = %d' % val_dataset_size)
 model = create_model(opt)
 visualizer = Visualizer(opt)
 
-total_steps = (start_epoch-1) * dataset_size + epoch_iter    
+total_steps = (start_epoch-1) * train_dataset_size + train_epoch_iter
 for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     epoch_start_time = time.time()
     # import pdb;pdb.set_trace()
     if epoch != start_epoch:
-        epoch_iter = epoch_iter % dataset_size
-    for i, data in enumerate(dataset, start=epoch_iter):
-        # import pdb;pdb.set_trace()
+        train_epoch_iter = train_epoch_iter % train_dataset_size
+
+    for i, train_data in enumerate(train_dataset, start=train_epoch_iter):
+
+
         iter_start_time = time.time()
         total_steps += opt.batchSize
-        epoch_iter += opt.batchSize
+        train_epoch_iter += opt.batchSize
 
         # whether to collect output images
         save_train = total_steps % opt.display_freq == 0
         ############## Forward Pass ######################
-        losses, generated = model(Variable(data['label']),Variable(data['image']), infer=save_train)
+        losses, generated = model(Variable(train_data['label']),Variable(train_data['image']), infer=save_train)
 
         # sum per device losses
         losses = [ torch.mean(x) if not isinstance(x, int) else x for x in losses ]
@@ -75,22 +79,58 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         if total_steps % opt.print_freq == 0:
             errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
             t = (time.time() - iter_start_time) / opt.batchSize
-            visualizer.print_current_errors(epoch, epoch_iter, errors, t)
-            visualizer.plot_current_errors(errors, total_steps)
+            visualizer.print_current_errors(epoch, train_epoch_iter, errors, t,mode='train')
+            visualizer.plot_current_errors(errors, total_steps,mode='train')
 
         ### display output images
         if save_train:
-            visuals = OrderedDict([('input_label', util.tensor2label(data['label'][0], opt.label_nc)),
-                                   ('synthesized_image', util.tensor2im(generated.data[0])),
-                                   ('real_image', util.tensor2im(data['image'][0]))])
+
+            visuals = OrderedDict([('input_label', util.tensor2label(train_data['image'][0])),
+                                   ('synthesized_image', util.tensor2im(generated.data[0],train_data['image'][0])),
+                                   ('real_image', util.tensor2imreal(train_data['label'][0],train_data['image'][0]))])
+
+
+
             visualizer.display_current_results(visuals, epoch, total_steps)
 
         ### save latest model
         if total_steps % opt.save_latest_freq == 0:
             print('saving the latest model (epoch %d, total_steps %d)' % (epoch, total_steps))
             model.module.save('latest')            
-            np.savetxt(iter_path, (epoch, epoch_iter), delimiter=',', fmt='%d')
-       
+            np.savetxt(iter_path, (epoch, train_epoch_iter), delimiter=',', fmt='%d')
+
+
+    Val_loss_count = 0
+    best_loss =999999
+    for p,val_data in enumerate(val_dataset,start=val_epoch_iter):
+        import pdb
+
+        pdb.set_trace()
+        val_epoch_iter += int(math.floor(opt.batchSize*0.1))
+        losses, generated = model(Variable(val_data['label']), Variable(val_data['image']))
+
+        # sum per device losses
+        losses = [torch.mean(x) if not isinstance(x, int) else x for x in losses]
+        loss_dict = dict(zip(model.module.loss_names, losses))
+
+        # calculate final loss scalar
+        loss_MSE = (loss_dict['MSE'])
+        loss_Local = loss_MSE
+        Val_loss_count+=loss_Local
+    ### print out errors
+        if total_steps % opt.print_freq == 0:
+            errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
+            t = 0
+
+            visualizer.print_current_errors(epoch,t, val_epoch_iter, errors,mode='val')
+            visualizer.plot_current_errors(errors, total_steps,mode='val')
+
+    if Val_loss_count< best_loss:
+        best_loss = Val_loss_count
+        print('Val loss decrease, save the best model ')
+        model.module.save('best')
+
+
     # end of epoch 
     iter_end_time = time.time()
     print('End of epoch %d / %d \t Time Taken: %d sec' %

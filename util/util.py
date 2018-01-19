@@ -1,42 +1,113 @@
 from __future__ import print_function
 import torch
-import numpy as np
 from PIL import Image
 import numpy as np
 import os
-
+from skimage.color import lab2rgb
+from skimage.io import imsave
 # Converts a Tensor into a Numpy array
 # |imtype|: the desired type of the converted numpy array
-def tensor2im(image_tensor, imtype=np.uint8, normalize=True):
-    if isinstance(image_tensor, list):
+def tensor2im(image_tensor,label_tensor, imtype=np.uint8, normalize=True):
+    #out in
+    if isinstance(label_tensor, list):
         image_numpy = []
-        for i in range(len(image_tensor)):
-            image_numpy.append(tensor2im(image_tensor[i], imtype, normalize))
+        for i in range(len(label_tensor)):
+            image_numpy.append(tensor2im(image_tensor[i],label_tensor[i], imtype, normalize))
         return image_numpy
-    image_numpy = image_tensor.cpu().float().numpy()
-    if normalize:
-        image_numpy = (np.transpose(image_numpy, (1, 2, 0)) + 1) / 2.0 * 255.0
-    else:
-        image_numpy = np.transpose(image_numpy, (1, 2, 0)) * 255.0      
-    image_numpy = np.clip(image_numpy, 0, 255)
-    if image_numpy.shape[2] == 1:        
-        image_numpy = image_numpy[:,:,0]
-    return image_numpy.astype(imtype)
+    # import pdb;pdb.set_trace()
+    label_numpy = (label_tensor.cpu().float().numpy() +1 ) * 50
+    image_numpy = image_tensor.cpu().float().numpy() *127
+    image_numpy = (np.transpose(image_numpy,(1,2,0)) ).repeat(2,axis=0).repeat(2,axis =1)
 
+    # image_numpy = transform.rescale(image_tensor,[2,2])
+
+    # print (label_numpy.shape,image_numpy.shape)
+
+
+    # print (image_numpy.max())
+    label_numpy = (np.transpose(label_numpy, (1,2, 0)))
+    # print(label_numpy.max())
+
+    image_numpy = np.clip(image_numpy, -127, 127)
+    label_numpy = np.clip(label_numpy,0,100)
+    # print(image_numpy.max())
+    # print(label_numpy.max())
+    # print(image_numpy.min())
+    # print(label_numpy.min())
+    total_numpy = np.concatenate((label_numpy,image_numpy),axis=2)
+
+    return total_numpy
+
+def tensor2imreal(image_tensor,label_tensor, imtype=np.uint8, normalize=True):
+    #out in
+    # import pdb;
+    # pdb.set_trace()
+    if isinstance(label_tensor, list):
+        image_numpy = []
+        for i in range(len(label_tensor)):
+            image_numpy.append(tensor2im(image_tensor[i],label_tensor[i], imtype, normalize))
+        return image_numpy
+
+    label_numpy = (label_tensor.cpu().float().numpy()+1 ) * 50
+    image_numpy =image_tensor.cpu().float().numpy() *127
+    # print (label_numpy.shape,image_numpy.shape)
+    image_numpy = (np.transpose(image_numpy,(1,2,0)) ).repeat(2,axis=0).repeat(2,axis =1)
+
+
+    label_numpy = (np.transpose(label_numpy, (1,2, 0)))
+    # print(label_numpy.max())
+
+    image_numpy = np.clip(image_numpy, -127, 127)
+    label_numpy = np.clip(label_numpy,0,100)
+    # image_numpy = image_numpy[:,:,:,0]
+    # print(image_numpy.max()
+    # print(label_numpy.max())
+    # print(image_numpy.min())
+    # print(label_numpy.min())
+    total_numpy = np.concatenate((label_numpy,image_numpy),axis=2)
+
+    return total_numpy
 # Converts a one-hot tensor into a colorful label map
-def tensor2label(label_tensor, n_label, imtype=np.uint8):
-    if n_label == 0:
-        return tensor2im(label_tensor, imtype)
-    label_tensor = label_tensor.cpu().float()    
-    if label_tensor.size()[0] > 1:
-        label_tensor = label_tensor.max(0, keepdim=True)[1]
-    label_tensor = Colorize(n_label)(label_tensor)
-    label_numpy = np.transpose(label_tensor.numpy(), (1, 2, 0))
-    return label_numpy.astype(imtype)
+def tensor2label(label_tensor,  imtype=np.uint8,normalize = True):
+
+    if isinstance(label_tensor, list):
+        image_numpy = []
+        for i in range(len(label_tensor)):
+            image_numpy.append(tensor2label(label_tensor[i], imtype, normalize))
+        return image_numpy
+    image_numpy = (label_tensor.cpu().float().numpy() +1) * 50
+
+    image_numpy = (np.transpose(image_numpy, ( 1,2, 0)))
+
+
+    image_numpy = np.clip(image_numpy, 0, 100)
+    if image_numpy.shape[2] == 1:
+        image_numpy = image_numpy[:, :, 0]
+    return image_numpy
+
 
 def save_image(image_numpy, image_path):
-    image_pil = Image.fromarray(image_numpy)
-    image_pil.save(image_path)
+
+    # print (image_numpy.max(),image_numpy.min())
+    if len(image_numpy.shape) == 2:
+        image_pil = Image.fromarray(image_numpy)
+        image_pil = image_pil.convert('RGB')
+        image_pil.save(image_path)
+    else:
+
+        image_numpy =image_numpy.astype(np.float64)
+        rgb_numpy =lab2rgb(image_numpy)
+
+        # rgb_numpy = rgb_numpy.astype(np.uint8)
+
+        # print(rgb_numpy)
+        imsave(image_path,rgb_numpy)
+        # image_pil = Image.romarray(image_numpy)
+
+    # if image_pil.mode == 'F':
+    #     image_pil = image_pil.convert('RGB')
+
+    # image_pil.save(image_path)
 
 def mkdirs(paths):
     if isinstance(paths, list) and not isinstance(paths, str):

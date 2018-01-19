@@ -69,7 +69,7 @@ class   Localnet(nn.Module):
         model +=[nn.Conv2d(ngf*multi*2,ngf*multi*2,kernel_size=3,padding=1),norm_layer(ngf*multi*2),nn.ReLU(True),
                  nn.Conv2d(ngf*multi*2,ngf*multi,kernel_size=3,padding=1),norm_layer(ngf*multi),nn.ReLU(True)]
         # Colorization network
-
+        # import pdb;pdb.set_trace()
         model +=[nn.Conv2d(ngf*multi,ngf*multi/2,kernel_size=3,padding=1),norm_layer(ngf*multi/2),nn.ReLU(True),
                  nn.UpsamplingNearest2d(scale_factor=2),
                  nn.Conv2d(ngf*multi/2,ngf*multi/4,kernel_size=3,padding=1),norm_layer(ngf*multi/4),nn.ReLU(True),

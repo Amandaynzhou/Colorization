@@ -30,11 +30,14 @@ class Visualizer():
             self.img_dir = os.path.join(self.web_dir, 'images')
             print('create web directory %s...' % self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
-        self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
-        with open(self.log_name, "a") as log_file:
+        self.log_name_train = os.path.join(opt.checkpoints_dir, opt.name, 'train_loss_log.txt')
+        with open(self.log_name_train, "a") as log_file:
             now = time.strftime("%c")
             log_file.write('================ Training Loss (%s) ================\n' % now)
-
+        self.log_name_val = os.path.join(opt.checkpoints_dir, opt.name, 'val_loss_log.txt')
+        with open(self.log_name_val, "a") as log_file:
+            now = time.strftime("%c")
+            log_file.write('================ Val Loss (%s) ================\n' % now)
     # |visuals|: dictionary of images to display or save
     def display_current_results(self, visuals, epoch, step):
         if self.tf_log: # show images in tensorboard output
@@ -94,23 +97,32 @@ class Visualizer():
             webpage.save()
 
     # errors: dictionary of error labels and values
-    def plot_current_errors(self, errors, step):
+    def plot_current_errors(self, errors, step,mode):
         if self.tf_log:
             for tag, value in errors.items():
-                summary = self.tf.Summary(value=[self.tf.Summary.Value(tag=tag, simple_value=value)])
+                summary = self.tf.Summary(value=[self.tf.Summary.Value(tag=tag+'%c'%mode, simple_value=value)])
                 self.writer.add_summary(summary, step)
 
     # errors: same format as |errors| of plotCurrentErrors
-    def print_current_errors(self, epoch, i, errors, t):
-        message = '(epoch: %d, iters: %d, time: %.3f) ' % (epoch, i, t)
-        for k, v in errors.items():
-            if v != 0:
-                message += '%s: %.3f ' % (k, v)
+    def print_current_errors(self, epoch, i, errors, t,mode):
+        if mode =='train':
+            message = '(epoch: %d, iters: %d, time: %.3f) ' % (epoch, i, t)
+            for k, v in errors.items():
+                if v != 0:
+                    message += '%s: %.3f ' % (k, v)
 
-        print(message)
-        with open(self.log_name, "a") as log_file:
-            log_file.write('%s\n' % message)
+            print(message)
+            with open(self.log_name_train, "a") as train_log_file:
+                train_log_file.write('%s\n' % message)
+        else:
+            message = '(epoch: %d, iters: %d, time: %.3f) ' % (epoch, i, t)
+            for k, v in errors.items():
+                if v != 0:
+                    message += '%s: %.3f ' % (k, v)
 
+            print(message)
+            with open(self.log_name_val, "a") as val_log_file:
+                val_log_file.write('%s\n' % message)
     # save image to the disk
     def save_images(self, webpage, visuals, image_path):
         image_dir = webpage.get_image_dir()

@@ -20,7 +20,7 @@ def is_image_file(filename):
 
 def make_dataset(dir):
     images = []
-    assert os.path.isdir(dir), '%s is not a valid directory' % dir
+    assert os.path.exists(dir), '%s is not a valid directory' % dir
     with open(dir) as trainfile:
         while True:
             line = trainfile.readline().strip('\n')
