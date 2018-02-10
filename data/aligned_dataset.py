@@ -1,7 +1,8 @@
 ### Copyright (C) 2017 NVIDIA Corporation. All rights reserved. 
 ### Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 import os.path
-from data.base_dataset import BaseDataset, get_params, get_transform, normalize
+from data.base_dataset import BaseDataset, get_params, get_transform, get_transform_resize
+import torchvision.transforms as trans
 from data.image_folder import make_dataset
 from PIL import Image,ImageCms
 from torch import split,cat,max,min,from_numpy
@@ -58,6 +59,7 @@ class AlignedDataset(BaseDataset):
         if self.opt.label_nc != 0:
             print('err! label is channel a and b')
         transform_image = get_transform(self.opt, params)
+        # transform_image_resize = get_transform_resize(self.opt,params)
         # resize_tensor = transforms.Compose([transforms.Scale((112,112), Image.BICUBIC)])
         # see = np.asarray(rgb_image.numpy())
         # print see[:,:,0].max()
@@ -65,10 +67,14 @@ class AlignedDataset(BaseDataset):
 
 
         lab_image = transform_image(rgb_image)
+        # lab_image_resize = transform_image_resize(rgb_image)
         # sa =lab2rgb(lab_image)
-        # imsave('e%d.jpg'%index,sa)
-
+        # # imsave('e%d.jpg'%index,sa)
+        # osize = [self.opt.loadSize/2, self.opt.loadSize/2]
+        # method = Image.BICUBIC
+        # label_image_resize = trans.Scale(osize, method)
         lab_image = from_numpy(lab_image).float()
+        # label_image_resize = from_numpy(label_image_resize).float()
         # print (lab2rgb(lab_image.numpy())[:,:,0].max())
         # lab_image = lab_image.permute(2,0,1)
 
@@ -93,8 +99,8 @@ class AlignedDataset(BaseDataset):
         B_tensor = B_tensor.add(127).div(255).numpy()
 
 
-        A_tensor =rescale(A_tensor,(0.5,0.5))
-        B_tensor = rescale(B_tensor,(0.5,0.5))
+        # A_tensor =rescale(A_tensor,(0.5,0.5))
+        # B_tensor = rescale(B_tensor,(0.5,0.5))
 
         # print  A_tensor.max(), B_tensor.max()
         # scale =transforms.Scale((112,112),Image.BICUBIC)
@@ -102,6 +108,7 @@ class AlignedDataset(BaseDataset):
         # sclat =transforms.Compose([TOPIL,scale])
         # A_tensor =np.asarray(sclat(A_tensor))
         # B_tensor =np.asarray( sclat(B_tensor))
+
         A_tensor =from_numpy(A_tensor).float()
         B_tensor = from_numpy(B_tensor).float()
 

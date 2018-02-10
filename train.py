@@ -47,6 +47,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     if epoch != start_epoch:
         train_epoch_iter = train_epoch_iter % train_dataset_size
     iter_start_time = time.time()
+
     for i, train_data in enumerate(train_dataset, start=train_epoch_iter):
 
 
@@ -57,20 +58,28 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         # whether to collect output images
         save_train = total_steps % opt.display_freq == 0
         ############## Forward Pass ######################
-        losses, generated = model(Variable(train_data['label']),Variable(train_data['image']), returnimg=save_train)
+        losses, generated = model(Variable(train_data['label']),Variable(train_data['image'])
+                                  , returnimg=save_train)
 
         # sum per device losses
         losses = [ torch.mean(x) if not isinstance(x, int) else x for x in losses ]
         loss_dict = dict(zip(model.module.loss_names, losses))
 
         # calculate final loss scalar
-        loss_MSE = (loss_dict['MSE'])
-        loss_Local = loss_MSE
-        ############### Backward Pass ####################
+        loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5
+        loss_G = loss_dict['G_GAN'] + loss_dict['G_GAN_Feat']
 
-        model.module.optimizer_L.zero_grad()
-        loss_Local.backward()
-        model.module.optimizer_L.step()
+
+        ############### Backward Pass ####################
+        # update generator weights
+        model.module.optimizer_G.zero_grad()
+        loss_G.backward()
+        model.module.optimizer_G.step()
+
+        # update discriminator weights
+        model.module.optimizer_D.zero_grad()
+        loss_D.backward()
+        model.module.optimizer_D.step()
 
         #call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"])
 
@@ -104,40 +113,40 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
 
     Val_loss_count = 0
     best_loss =999999
-
-    for p,val_data in enumerate(val_dataset,start=val_epoch_iter):
-        # if val_epoch_iter==3000:
-
-        # model.eval()
-        #     import pdb;
-        #
-        #     pdb.set_trace()
-        val_epoch_iter += opt.batchSize
-        # losses, generated = model(Variable(val_data['label'],volatile=True),
-        #                           Variable(val_data['image'],volatile=True) ,infer=False)
-        losses ,_ = model(Variable(val_data['label'],volatile=True),
-                        Variable(val_data['image'],volatile=True),returnimg=False,infer = True)
-        # sum per device losses
-        losses = [torch.mean(x) if not isinstance(x, int) else x for x in losses]
-        loss_dict = dict(zip(model.module.loss_names, losses))
-
-        # calculate final loss scalar
-        loss_MSE = (loss_dict['MSE'])
-        loss_Local = loss_MSE.data[0]
-        Val_loss_count+=loss_Local
-        model.module.optimizer_L.zero_grad()
-    ### print out errors
-        if total_steps % opt.print_freq == 0:
-            errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
-            t = (time.time() - iter_start_time) / opt.batchSize
-
-            visualizer.print_current_errors(epoch, val_epoch_iter, errors,t,mode='val')
-            visualizer.plot_current_errors(errors, total_steps,mode='val')
-
-    if Val_loss_count< best_loss:
-        best_loss = Val_loss_count
-        print('Val loss decrease, save the best model ')
-        model.module.save('best')
+    #
+    # for p,val_data in enumerate(val_dataset,start=val_epoch_iter):
+    #     # if val_epoch_iter==3000:
+    #
+    #     # model.eval()
+    #     #     import pdb;
+    #     #
+    #     #     pdb.set_trace()
+    #     val_epoch_iter += opt.batchSize
+    #     # losses, generated = model(Variable(val_data['label'],volatile=True),
+    #     #                           Variable(val_data['image'],volatile=True) ,infer=False)
+    #     losses ,_ = model(Variable(val_data['label'],volatile=True),
+    #                     Variable(val_data['image'],volatile=True),returnimg=False,infer = True)
+    #     # sum per device losses
+    #     losses = [torch.mean(x) if not isinstance(x, int) else x for x in losses]
+    #     loss_dict = dict(zip(model.module.loss_names, losses))
+    #
+    #     # calculate final loss scalar
+    #     loss_MSE = (loss_dict['MSE'])
+    #     loss_Local = loss_MSE.data[0]
+    #     Val_loss_count+=loss_Local
+    #     model.module.optimizer_L.zero_grad()
+    # ### print out errors
+    #     if total_steps % opt.print_freq == 0:
+    #         errors = {k: v.data[0] if not isinstance(v, int) else v for k, v in loss_dict.items()}
+    #         t = (time.time() - iter_start_time) / opt.batchSize
+    #
+    #         visualizer.print_current_errors(epoch, val_epoch_iter, errors,t,mode='val')
+    #         visualizer.plot_current_errors(errors, total_steps,mode='val')
+    #
+    # if Val_loss_count< best_loss:
+    #     best_loss = Val_loss_count
+    #     print('Val loss decrease, save the best model ')
+    #     model.module.save('best')
 
 
     # end of epoch 

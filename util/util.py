@@ -17,6 +17,7 @@ def tensor2im(image_tensor,label_tensor, imtype=np.uint8, normalize=True):
     # import pdb;pdb.set_trace()
     label_numpy = (label_tensor.cpu().float().numpy() ) * 100
     image_numpy = (image_tensor.cpu().float().numpy()-0.5) *256
+
     image_numpy = (np.transpose(image_numpy,(1,2,0)) ).repeat(2,axis=0).repeat(2,axis =1)
 
     # image_numpy = transform.rescale(image_tensor,[2,2])
@@ -51,7 +52,7 @@ def tensor2imreal(image_tensor,label_tensor, imtype=np.uint8, normalize=True):
     label_numpy = (label_tensor.cpu().float().numpy() ) * 100
     image_numpy =(image_tensor.cpu().float().numpy()-0.5) *256
     # print (label_numpy.shape,image_numpy.shape)
-    image_numpy = (np.transpose(image_numpy,(1,2,0)) ).repeat(2,axis=0).repeat(2,axis =1)
+    image_numpy = (np.transpose(image_numpy,(1,2,0)) )
 
 
     label_numpy = (np.transpose(label_numpy, (1,2, 0)))

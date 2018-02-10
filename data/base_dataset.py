@@ -67,6 +67,36 @@ def get_transform(opt, params, method=Image.BICUBIC, normalize=True,channel = 2)
     return transforms.Compose(transform_list)
 
 
+def get_transform_resize(opt, params, method=Image.BICUBIC, normalize=True, channel=2):
+    transform_list = []
+
+    if 'resize' in opt.resize_or_crop:
+        osize = [opt.loadSize/2, opt.loadSize/2]
+        transform_list.append(transforms.Scale(osize, method))
+    elif 'scale_width' in opt.resize_or_crop:
+        transform_list.append(transforms.Lambda(lambda img: __scale_width(img, opt.loadSize, method)))
+
+    if 'crop' in opt.resize_or_crop:
+        transform_list.append(transforms.Lambda(lambda img: __crop(img, params['crop_pos'], opt.fineSize)))
+
+        # if opt.resize_or_crop == 'none':
+        # base = float(2 ** opt.n_downsample_global)
+        # if opt.netG == 'local':
+        #     base *= (2 ** opt.n_local_enhancers)
+        # transform_list.append(transforms.Lambda(lambda img: __make_power_2(img, base, method)))
+
+    if opt.isTrain and not opt.no_flip:
+        transform_list.append(transforms.Lambda(lambda img: __flip(img, params['flip'])))
+
+    # transform_list += [transforms.ToTensor()]
+    transform_list.append(transforms.Lambda(lambda img: __rgb2lab(img)))
+    # transform_list.append(transforms.Lambda(lambda img: __lab2tensor(img)))
+    # transform_list.append(transforms.Normalize((1000, 0, 0), (100, 127, 127)))
+    # transform_list.append(transforms.ToTensor())
+    # if normalize:
+    # transform_list += [transforms.Normalize((50, 0, 0), (100, 127, 127))]
+    return transforms.Compose(transform_list)
+
 
 def normalize():    #LAB
     return transforms.Normalize((50, 0, 0), (100, 255, 255))
