@@ -47,9 +47,75 @@ def print_network(net):
     print(net)
     print('Total number of parameters: %d' % num_params)
 
+
+def define_G(input_nc,output_nc, ndf, n_downsample, norm='batch',gpu_ids=[]):
+    norm_layer = get_norm_layer(norm_type=norm)
+    netG = ResGenNet(input_nc, output_nc,norm_layer)
+    print (netG)
+    if len(gpu_ids) > 0:
+        assert(torch.cuda.is_available())
+        netG.cuda(gpu_ids[0])
+    netG.apply(weights_init)
+    return netG
+
+
+def define_D(input_nc, ndf, n_layers_D, norm='instance', use_sigmoid=False, num_D=1, getIntermFeat=False, gpu_ids=[]):
+    norm_layer = get_norm_layer(norm_type=norm)
+    netD = MultiscaleDiscriminator(input_nc, ndf, n_layers_D, norm_layer, use_sigmoid, num_D, getIntermFeat)
+    print(netD)
+    if len(gpu_ids) > 0:
+        assert(torch.cuda.is_available())
+        netD.cuda(gpu_ids[0])
+    netD.apply(weights_init)
+    return netD
+
 ##############################################################################
 # Losses
 ##############################################################################
+class GANLoss(nn.Module):
+    def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0,
+                 tensor=torch.FloatTensor):
+        super(GANLoss, self).__init__()
+        self.real_label = target_real_label
+        self.fake_label = target_fake_label
+        self.real_label_var = None
+        self.fake_label_var = None
+        self.Tensor = tensor
+        if use_lsgan:
+            self.loss = nn.MSELoss()
+        else:
+            self.loss = nn.BCELoss()
+
+    def get_target_tensor(self, input, target_is_real):
+        target_tensor = None
+        if target_is_real:
+            create_label = ((self.real_label_var is None) or
+                            (self.real_label_var.numel() != input.numel()))
+            if create_label:
+                real_tensor = self.Tensor(input.size()).fill_(self.real_label)
+                self.real_label_var = Variable(real_tensor, requires_grad=False)
+            target_tensor = self.real_label_var
+        else:
+            create_label = ((self.fake_label_var is None) or
+                            (self.fake_label_var.numel() != input.numel()))
+            if create_label:
+                fake_tensor = self.Tensor(input.size()).fill_(self.fake_label)
+                self.fake_label_var = Variable(fake_tensor, requires_grad=False)
+            target_tensor = self.fake_label_var
+        return target_tensor
+
+    def __call__(self, input, target_is_real):
+        if isinstance(input[0], list):
+            loss = 0
+            for input_i in input:
+                pred = input_i[-1]
+                target_tensor = self.get_target_tensor(pred, target_is_real)
+                loss += self.loss(pred, target_tensor)
+            return loss
+        else:
+            target_tensor = self.get_target_tensor(input[-1], target_is_real)
+            return self.loss(input[-1], target_tensor)
+
 
 ##############################################################################
 
@@ -86,12 +152,19 @@ class   Localnet(nn.Module):
 
 # Define a resnet block
 class ResnetBlock(nn.Module):
-    def __init__(self, dim, padding_type, norm_layer, activation=nn.ReLU(True), use_dropout=False):
+    def __init__(self, indim,dim, outdim,stride,padding_type, norm_layer, activation=nn.ReLU(True), use_dropout=False):
         super(ResnetBlock, self).__init__()
-        self.conv_block = self.build_conv_block(dim, padding_type, norm_layer, activation, use_dropout)
+        self.debug,self.conv_block = self.build_conv_block(indim, dim, outdim, stride, padding_type, norm_layer, activation, use_dropout)
+        # self.downSampleIn = self.downSampleInput()
+        self.stride = stride
+        self.downSample = nn.Sequential(
+                nn.Conv2d(indim, outdim,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(outdim))
 
-    def build_conv_block(self, dim, padding_type, norm_layer, activation, use_dropout):
+    def build_conv_block(self, indim, dim, outdim, stride,padding_type, norm_layer, activation, use_dropout):
         conv_block = []
+        debug = []
         p = 0
         if padding_type == 'reflect':
             conv_block += [nn.ReflectionPad2d(1)]
@@ -102,9 +175,13 @@ class ResnetBlock(nn.Module):
         else:
             raise NotImplementedError('padding [%s] is not implemented' % padding_type)
 
-        conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p),
+        conv_block += [nn.Conv2d(indim, dim, kernel_size=3, padding=p,stride=stride),
                        norm_layer(dim),
                        activation]
+
+
+        debug = nn.Sequential(*conv_block)
+        conv_block=[]
         if use_dropout:
             conv_block += [nn.Dropout(0.5)]
 
@@ -117,16 +194,147 @@ class ResnetBlock(nn.Module):
             p = 1
         else:
             raise NotImplementedError('padding [%s] is not implemented' % padding_type)
-        conv_block += [nn.Conv2d(dim, dim, kernel_size=3, padding=p),
-                       norm_layer(dim)]
+        conv_block += [nn.Conv2d(dim, outdim, kernel_size=3, padding=p),
+                       norm_layer(outdim)]
 
-        return nn.Sequential(*conv_block)
+        return debug,nn.Sequential(*conv_block)
+
+    # def downSampleInput(self):
+    #     down = []
+    #     down+= [nn.AvgPool2d(2,2,0)]
+    #     return nn.Sequential(*down)
 
     def forward(self, x):
-        out = x + self.conv_block(x)
+        # import pdb;pdb.set_trace()
+        mid = self.debug(x)
+        mid = self.conv_block(mid)
+
+        out = self.downSample(x) + mid
+
         return out
 
 
+class ConvBlock(nn.Module):
+    def __init__(self, indim,dim, outdim,stride,padding_type, norm_layer, activation=nn.ReLU(True), use_dropout=False):
+        super(ConvBlock, self).__init__()
+        self.pad1=nn.ReflectionPad2d(1)
+        # self.
+
+class ResGenNet(nn.Module):
+    def __init__(self, input_nc, output_nc,norm_layer=nn.BatchNorm2d):
+        super(ResGenNet,self).__init__()
+        activation = nn.ReLU(True)
+        model = [ResnetBlock(input_nc,64,128,2,'reflect',norm_layer,use_dropout=True)]
+        # import pdb;pdb.set_trace()
+        # model += [nn.AvgPool2d(2,2,0) ]
+        model += [ResnetBlock(128,128,256,2,'reflect',norm_layer,use_dropout=True)]
+        # model += [nn.AvgPool2d(2,2,0) ]
+        model += [ResnetBlock(256,256,512,2,'reflect',norm_layer,use_dropout=True)]
+        # model += [nn.AvgPool2d(2,2,0) ]
+
+        model += [ResnetBlock(512,256,128,1,'reflect',norm_layer,use_dropout=True)]
+        model+= [nn.UpsamplingNearest2d(scale_factor=2)]
+        model += [ResnetBlock(128,64,64,1,'reflect',norm_layer,use_dropout=True)]
+        model += [nn.UpsamplingNearest2d(scale_factor=2)]
+        model +=[nn.Conv2d(64,32,kernel_size=3,padding=1),norm_layer(32),nn.ReLU(True),
+                 nn.Conv2d(32,2,kernel_size=3,padding=1),nn.Sigmoid()]
+        self.model = nn.Sequential(*model)
+    def forward(self,input):
+        return self.model(input)
+
+class MultiscaleDiscriminator(nn.Module):
+    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d,
+                 use_sigmoid=False, num_D=3, getIntermFeat=False):
+        super(MultiscaleDiscriminator, self).__init__()
+        self.num_D = num_D
+        self.n_layers = n_layers
+        self.getIntermFeat = getIntermFeat
+
+        for i in range(num_D):
+            netD = NLayerDiscriminator(input_nc, ndf, n_layers, norm_layer, use_sigmoid, getIntermFeat)
+            if getIntermFeat:
+                for j in range(n_layers + 2):
+                    setattr(self, 'scale' + str(i) + '_layer' + str(j), getattr(netD, 'model' + str(j)))
+            else:
+                setattr(self, 'layer' + str(i), netD.model)
+
+        self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
+
+    def singleD_forward(self, model, input):
+        if self.getIntermFeat:
+            result = [input]
+            for i in range(len(model)):
+                result.append(model[i](result[-1]))
+            return result[1:]
+        else:
+            return [model(input)]
+
+    def forward(self, input):
+        num_D = self.num_D
+        result = []
+        input_downsampled = input
+        for i in range(num_D):
+            if self.getIntermFeat:
+                model = [getattr(self, 'scale' + str(num_D - 1 - i) + '_layer' + str(j)) for j in
+                         range(self.n_layers + 2)]
+            else:
+                model = getattr(self, 'layer' + str(num_D - 1 - i))
+            result.append(self.singleD_forward(model, input_downsampled))
+            if i != (num_D - 1):
+                input_downsampled = self.downsample(input_downsampled)
+        return result
+
+
+# define PatchGan discriminator
+class NLayerDiscriminator(nn.Module):
+    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False, getIntermFeat=False):
+        super(NLayerDiscriminator, self).__init__()
+        self.getIntermFeat = getIntermFeat
+        self.n_layers = n_layers
+        kw = 4
+        padw = int(np.ceil((kw-1.0)/2))
+        sequence = [[nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]]
+
+        nf = ndf
+        for n in range(1, n_layers):
+            nf_prev = nf
+            nf = min(nf * 2, 512)
+            sequence += [[
+                nn.Conv2d(nf_prev, nf, kernel_size=kw, stride=2, padding=padw),
+                norm_layer(nf), nn.LeakyReLU(0.2, True)
+            ]]
+
+        nf_prev = nf
+        nf = min(nf * 2, 512)
+        sequence += [[
+            nn.Conv2d(nf_prev, nf, kernel_size=kw, stride=1, padding=padw),
+            norm_layer(nf),
+            nn.LeakyReLU(0.2, True)
+        ]]
+
+        sequence += [[nn.Conv2d(nf, 1, kernel_size=kw, stride=1, padding=padw)]]
+
+        if use_sigmoid:
+            sequence += [[nn.Sigmoid()]]
+
+        if getIntermFeat:
+            for n in range(len(sequence)):
+                setattr(self, 'model'+str(n), nn.Sequential(*sequence[n]))
+        else:
+            sequence_stream = []
+            for n in range(len(sequence)):
+                sequence_stream += sequence[n]
+            self.model = nn.Sequential(*sequence_stream)
+
+    def forward(self, input):
+        if self.getIntermFeat:
+            res = [input]
+            for n in range(self.n_layers+2):
+                model = getattr(self, 'model'+str(n))
+                res.append(model(res[-1]))
+            return res[1:]
+        else:
+            return self.model(input)
 
 
 class GlobalGenerator(nn.Module):
@@ -159,3 +367,4 @@ class GlobalGenerator(nn.Module):
 
     def forward(self, input):
         return self.model(input)
+

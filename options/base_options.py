@@ -50,7 +50,7 @@ class BaseOptions():
         self.parser.add_argument('--niter_fix_local', type=int, default=0, help='number of epochs that we only train the outmost local enhancer')
         #
         # # for instance-wise features
-        # self.parser.add_argument('--no_instance', action='store_true', help='if specified, do *not* add instance map as input')
+        self.parser.add_argument('--no_instance', action='store_true', help='if specified, do *not* add instance map as input')
         # self.parser.add_argument('--instance_feat', action='store_true', help='if specified, add encoded instance features as input')
         # self.parser.add_argument('--label_feat', action='store_true', help='if specified, add encoded label features as input')
         # self.parser.add_argument('--feat_num', type=int, default=3, help='vector length for encoded features')

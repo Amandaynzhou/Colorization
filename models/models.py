@@ -3,8 +3,8 @@
 import torch
 
 def create_model(opt):
-    from .Color_model import RecolorModel
-    model = RecolorModel()
+    from .Color_model import RecolorModel,GanRecolorModel
+    model = GanRecolorModel()
     model.initialize(opt)
     print("model [%s] was created" % (model.name()))
 
